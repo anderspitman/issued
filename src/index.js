@@ -3,66 +3,88 @@ const fs = require('fs');
 
 http.createServer(function(req, res) {
 
-  if (req.method === 'POST' && req.url === '/submit_issue') {
 
-    let body = "";
+  if (req.url === '/submit_issue') {
 
-    req.on('data', (chunk) => {
-      body += chunk;
-    });
-    req.on('end', () => {
+    // CORS
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    
+    if (req.method === 'POST') {
 
-      try {
-        const parsedBody = JSON.parse(body);
-        const datetime = new Date();
-        const issueDirectory = './issues/' + datetime.toISOString();
+      let body = "";
 
-        fs.mkdir(issueDirectory, (err) => {
-          if (err) {
-            res.statusCode = 500;
-            res.write("Error storing issue");
-          }
-          else {
+      req.on('data', (chunk) => {
+        body += chunk;
+      });
+      req.on('end', () => {
 
-            const reportPath = issueDirectory + '/report.txt';
-            const reportFile = fs.createWriteStream(reportPath);
+        let parsedBody;
+        
+        try {
+          parsedBody = JSON.parse(body);
+        }
+        catch (e) {
+          res.statusCode = 400;
+          res.write("Invalid JSON payload");
+        }
 
-            if (parsedBody.email && parsedBody.message) {
+        console.log(parsedBody);
+
+        if (parsedBody && parsedBody.email && parsedBody.message) {
+
+          const datetime = new Date();
+          const issueDirectory = './issues/' + datetime.toISOString();
+
+          fs.mkdir(issueDirectory, (err) => {
+            if (err) {
+              res.statusCode = 500;
+              res.write("Error storing issue");
+            }
+            else {
+
+              const reportPath = issueDirectory + '/report.txt';
+              console.log(reportPath);
+              const reportFile = fs.createWriteStream(reportPath);
+
               reportFile.write(parsedBody.email);
               reportFile.write('\n\n');
               reportFile.write(parsedBody.message);
               reportFile.write('\n');
+              reportFile.end();
+
+
+              if (parsedBody.screenshot) {
+                const screenshotPath = issueDirectory + '/screenshot.png';
+                const screenshotFile = fs.createWriteStream(screenshotPath);
+                const screenshot = Buffer.from(parsedBody.screenshot, 'base64');
+
+                fs.writeFile(screenshotPath, screenshot, (err) => {
+                  if (err) {
+                    res.statusCode = 500;
+                    res.write("Error saving screenshot");
+                  }
+                });
+              }
             }
-            else {
-              res.statusCode = 400;
-              res.write("Missing email or message");
-            }
-            reportFile.end();
+          });
+        }
+        else {
+          res.statusCode = 400;
+          res.write("Missing email or message");
+        }
 
-
-            if (parsedBody.screenshot) {
-              const screenshotPath = issueDirectory + '/screenshot.png';
-              const screenshotFile = fs.createWriteStream(screenshotPath);
-              const screenshot = Buffer.from(parsedBody.screenshot, 'base64');
-
-              fs.writeFile(screenshotPath, screenshot, (err) => {
-                if (err) {
-                  res.statusCode = 500;
-                  res.write("Error saving screenshot");
-                }
-              });
-            }
-          }
-
-          res.end();
-        });
-      }
-      catch (e) {
-        res.statusCode = 400;
-        res.write("Invalid JSON payload");
         res.end();
-      }
-    });
+      });
+    }
+    else if (req.method === 'OPTIONS') {
+      res.end();
+    }
+    else {
+      res.statusCode = 405;
+      res.write("Method not allowed");
+      res.end();
+    }
   }
   else {
     res.statusCode = 404;
